@@ -1,0 +1,19 @@
+# data (downloaded separately, not committed — see README for source)
+data/
+*.hdf5
+*.h5
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# model checkpoints
+*.pt
+*.pth
+checkpoints/
+
+# misc
+.DS_Store
+.env
