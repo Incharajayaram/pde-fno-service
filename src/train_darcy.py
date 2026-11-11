@@ -48,6 +48,10 @@ def main():
     parser.add_argument("--width", type=int, default=32)
     parser.add_argument("--step-size", type=int, default=100, help="LR decay step (epochs)")
     parser.add_argument("--gamma", type=float, default=0.5, help="LR decay factor")
+    parser.add_argument("--patience", type=int, default=30,
+                         help="stop if val loss hasn't improved by --min-delta for this many epochs")
+    parser.add_argument("--min-delta", type=float, default=1e-4,
+                         help="minimum val-loss improvement to reset the patience counter")
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
@@ -70,15 +74,27 @@ def main():
     best_val = float("inf")
     best_path = os.path.join(TRAIN_CKPT_DIR, "fno2d_darcy_best.pt")
 
+    epochs_since_improvement = 0
+    epochs_since_decay = 0  # grace period after each LR decay before patience can trigger
+
     t0 = time.time()
+    stopped_early = False
     for epoch in range(1, args.epochs + 1):
         train_loss = run_epoch(model, train_loader, device, optimizer)
         val_loss = run_epoch(model, val_loader, device, optimizer=None)
+
+        lr_before = optimizer.param_groups[0]["lr"]
         scheduler.step()
+        if optimizer.param_groups[0]["lr"] != lr_before:
+            epochs_since_decay = 0  # an LR decay just happened -- give it a fresh chance to help
+        else:
+            epochs_since_decay += 1
+
         history.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
 
-        if val_loss < best_val:
+        if val_loss < best_val - args.min_delta:
             best_val = val_loss
+            epochs_since_improvement = 0
             tmp_path = best_path + ".tmp"
             torch.save({
                 "model_state": model.state_dict(),
@@ -92,16 +108,25 @@ def main():
                 "val_loss": val_loss,
             }, tmp_path)
             os.replace(tmp_path, best_path)
+        else:
+            epochs_since_improvement += 1
 
         if epoch % 10 == 0 or epoch == 1:
             elapsed = time.time() - t0
             print(f"epoch {epoch:4d}/{args.epochs}  train_rel_l2 {train_loss:.4f}  "
                   f"val_rel_l2 {val_loss:.4f}  best_val {best_val:.4f}  elapsed {elapsed:.1f}s")
 
+        if epochs_since_improvement >= args.patience and epochs_since_decay >= args.patience:
+            print(f"early stopping at epoch {epoch}: no improvement > {args.min_delta} "
+                  f"for {args.patience} epochs (since the last LR decay)")
+            stopped_early = True
+            break
+
     with open(os.path.join(TRAIN_CKPT_DIR, "history.json"), "w") as f:
         json.dump(history, f, indent=2)
 
-    print(f"done. best val relative L2 = {best_val:.4f}, checkpoint at {best_path}")
+    print(f"done ({'early stopped' if stopped_early else 'completed'}). "
+          f"best val relative L2 = {best_val:.4f}, checkpoint at {best_path}")
 
 
 if __name__ == "__main__":
