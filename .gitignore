@@ -13,9 +13,11 @@ venv/
 *.pt
 *.pth
 checkpoints/
+checkpoints_darcy/
 
-# exception: the small, self-contained checkpoint the backend deploys with
+# exception: the small, self-contained checkpoints the backend deploys with
 !app/model/fno_burgers_final.pt
+!app/model/fno2d_darcy_final.pt
 
 # misc
 .DS_Store
