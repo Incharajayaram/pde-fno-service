@@ -1,0 +1,6 @@
+# Dependencies for tests/ (model forward-pass + FastAPI endpoint tests).
+# torch is installed separately (CPU wheel) in CI -- see .github/workflows/tests.yml
+# and Dockerfile, which both avoid pulling the much larger CUDA build.
+-r requirements.txt
+pytest==9.0.2
+httpx==0.28.1

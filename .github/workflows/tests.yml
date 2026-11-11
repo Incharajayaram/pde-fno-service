@@ -1,0 +1,32 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-test.txt', 'requirements.txt') }}
+
+      # CPU-only wheel, same as Dockerfile -- avoids pulling the much larger
+      # CUDA build on a runner that has no GPU anyway.
+      - name: Install torch (CPU)
+        run: pip install torch==2.9.1 --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install test dependencies
+        run: pip install -r requirements-test.txt
+
+      - name: Run tests
+        run: pytest -v
