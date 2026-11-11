@@ -1,0 +1,5 @@
+# Extra dependencies needed to run src/data.py and src/train.py locally
+# (not installed in the Docker image used for serving -- see Dockerfile).
+-r requirements.txt
+torch==2.9.1
+h5py==3.16.0

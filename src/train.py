@@ -93,6 +93,9 @@ def main():
 
         if val_loss < best_val:
             best_val = val_loss
+            # Write to a temp file then atomically rename, so a crash/disk-full
+            # mid-write can never corrupt the last good checkpoint.
+            tmp_path = best_path + ".tmp"
             torch.save({
                 "model_state": model.state_dict(),
                 "modes": args.modes,
@@ -102,7 +105,8 @@ def main():
                 "resolution": payload["resolution"],
                 "epoch": epoch,
                 "val_loss": val_loss,
-            }, best_path)
+            }, tmp_path)
+            os.replace(tmp_path, best_path)
 
         if epoch % 10 == 0 or epoch == 1:
             elapsed = time.time() - t0

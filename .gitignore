@@ -9,10 +9,13 @@ __pycache__/
 .venv/
 venv/
 
-# model checkpoints
+# model checkpoints (training scratch -- not committed)
 *.pt
 *.pth
 checkpoints/
+
+# exception: the small, self-contained checkpoint the backend deploys with
+!app/model/fno_burgers_final.pt
 
 # misc
 .DS_Store

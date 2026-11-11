@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PDE Solutions as a Service</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6; /* initial condition */
+    --series-2:       #eb6834; /* predicted solution */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page:           #0d0d0d;
+      --surface-1:      #1a1a19;
+      --text-primary:   #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      --series-2:       #d95926;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1:       #3987e5;
+    --series-2:       #d95926;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 24px 16px 48px;
+  }
+  h1 { font-size: 1.25rem; margin: 0 0 4px; }
+  .subtitle { color: var(--text-secondary); font-size: 0.9rem; margin: 0 0 20px; }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  button {
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--text-secondary); }
+  button.primary {
+    background: var(--series-1);
+    border-color: var(--series-1);
+    color: white;
+    font-weight: 600;
+  }
+  button.primary:hover { opacity: 0.9; }
+
+  textarea {
+    width: 100%;
+    min-height: 60px;
+    font-family: ui-monospace, monospace;
+    font-size: 0.8rem;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--page);
+    color: var(--text-primary);
+    resize: vertical;
+  }
+  label { font-size: 0.8rem; color: var(--text-secondary); display: block; margin-bottom: 6px; }
+
+  .legend { display: flex; gap: 16px; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+
+  svg { width: 100%; height: auto; display: block; }
+  .gridline { stroke: var(--gridline); stroke-width: 1; }
+  .baseline { stroke: var(--baseline); stroke-width: 1; }
+  .axis-label { fill: var(--text-muted); font-size: 11px; }
+  .series-1-line { fill: none; stroke: var(--series-1); stroke-width: 2; }
+  .series-2-line { fill: none; stroke: var(--series-2); stroke-width: 2; }
+  .hover-line { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 3 3; display: none; }
+  .tooltip { display: none; }
+  .tooltip rect { fill: var(--surface-1); stroke: var(--border); rx: 6; }
+  .tooltip text { fill: var(--text-primary); font-size: 11px; }
+
+  .status { font-size: 0.8rem; color: var(--text-muted); min-height: 1.2em; margin-top: 8px; }
+  .error { color: var(--series-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>PDE Solutions as a Service</h1>
+  <p class="subtitle">
+    Fourier Neural Operator trained on PDEBench's 1D Burgers' equation (&nu;=0.01).
+    Give it an initial condition u(x, t=0); it predicts the fully-evolved solution u(x, T) directly &mdash; no step-by-step simulation.
+  </p>
+
+  <div class="card">
+    <label>Pick a preset initial condition, or edit the values below (comma-separated, any length)</label>
+    <div class="presets" id="presetButtons"></div>
+    <textarea id="u0Input"></textarea>
+    <div style="margin-top: 12px; display:flex; gap: 8px; align-items: center;">
+      <button class="primary" id="predictBtn">Predict solution</button>
+      <span class="status" id="statusLine"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="legend">
+      <span><span class="swatch" style="background: var(--series-1)"></span>Initial condition u(x, 0)</span>
+      <span><span class="swatch" style="background: var(--series-2)"></span>Predicted solution u(x, T)</span>
+    </div>
+    <svg id="chart" viewBox="0 0 640 320" preserveAspectRatio="xMidYMid meet">
+      <g id="gridlines"></g>
+      <path id="series1Path" class="series-1-line"></path>
+      <path id="series2Path" class="series-2-line"></path>
+      <line id="hoverLine" class="hover-line" x1="0" y1="0" x2="0" y2="280"></line>
+      <g id="tooltip" class="tooltip"></g>
+      <g id="axisLabels"></g>
+      <rect id="hoverCatcher" x="40" y="10" width="580" height="280" fill="transparent" />
+    </svg>
+  </div>
+</div>
+
+<script>
+const PAD = { left: 40, right: 20, top: 10, bottom: 30 };
+const PLOT_W = 640 - PAD.left - PAD.right;
+const PLOT_H = 320 - PAD.top - PAD.bottom;
+
+let lastResult = null;
+
+function toPlotX(xNorm) { return PAD.left + xNorm * PLOT_W; }
+function toPlotY(y, yMin, yMax) {
+  const t = (y - yMin) / (yMax - yMin || 1);
+  return PAD.top + (1 - t) * PLOT_H;
+}
+
+function pathFrom(xs, ys, yMin, yMax) {
+  return xs.map((x, i) => `${i === 0 ? "M" : "L"} ${toPlotX(x).toFixed(2)} ${toPlotY(ys[i], yMin, yMax).toFixed(2)}`).join(" ");
+}
+
+function drawGrid() {
+  const g = document.getElementById("gridlines");
+  const labels = document.getElementById("axisLabels");
+  g.innerHTML = "";
+  labels.innerHTML = "";
+  for (let i = 0; i <= 4; i++) {
+    const yFrac = i / 4;
+    const y = PAD.top + yFrac * PLOT_H;
+    g.insertAdjacentHTML("beforeend", `<line class="gridline" x1="${PAD.left}" y1="${y}" x2="${640 - PAD.right}" y2="${y}" />`);
+  }
+  g.insertAdjacentHTML("beforeend", `<line class="baseline" x1="${PAD.left}" y1="${PAD.top + PLOT_H}" x2="${640 - PAD.right}" y2="${PAD.top + PLOT_H}" />`);
+  for (const frac of [0, 0.5, 1]) {
+    labels.insertAdjacentHTML("beforeend", `<text class="axis-label" x="${toPlotX(frac)}" y="${PAD.top + PLOT_H + 16}" text-anchor="middle">${frac.toFixed(2)}</text>`);
+  }
+  labels.insertAdjacentHTML("beforeend", `<text class="axis-label" x="${PAD.left + PLOT_W / 2}" y="310" text-anchor="middle">x</text>`);
+}
+
+function render(result) {
+  lastResult = result;
+  const { x, u0_resampled, prediction } = result;
+  const allY = [...u0_resampled, ...prediction];
+  const yMin = Math.min(...allY), yMax = Math.max(...allY);
+  const pad = (yMax - yMin) * 0.1 || 0.1;
+
+  document.getElementById("series1Path").setAttribute("d", pathFrom(x, u0_resampled, yMin - pad, yMax + pad));
+  document.getElementById("series2Path").setAttribute("d", pathFrom(x, prediction, yMin - pad, yMax + pad));
+  drawGrid();
+}
+
+function setupHover() {
+  const svg = document.getElementById("chart");
+  const catcher = document.getElementById("hoverCatcher");
+  const hoverLine = document.getElementById("hoverLine");
+  const tooltip = document.getElementById("tooltip");
+
+  function hide() {
+    hoverLine.style.display = "none";
+    tooltip.style.display = "none";
+  }
+
+  catcher.addEventListener("mousemove", (evt) => {
+    if (!lastResult) return;
+    const rect = svg.getBoundingClientRect();
+    const scaleX = 640 / rect.width;
+    const px = (evt.clientX - rect.left) * scaleX;
+    const xNorm = Math.min(1, Math.max(0, (px - PAD.left) / PLOT_W));
+    const { x, u0_resampled, prediction } = lastResult;
+    let idx = 0, best = Infinity;
+    for (let i = 0; i < x.length; i++) {
+      const d = Math.abs(x[i] - xNorm);
+      if (d < best) { best = d; idx = i; }
+    }
+    const plotX = toPlotX(x[idx]);
+    hoverLine.setAttribute("x1", plotX);
+    hoverLine.setAttribute("x2", plotX);
+    hoverLine.style.display = "block";
+
+    tooltip.innerHTML = "";
+    const boxW = 150, boxH = 48;
+    let boxX = plotX + 8;
+    if (boxX + boxW > 640 - PAD.right) boxX = plotX - boxW - 8;
+    const boxY = PAD.top + 4;
+    tooltip.insertAdjacentHTML("beforeend", `<rect x="${boxX}" y="${boxY}" width="${boxW}" height="${boxH}"></rect>`);
+    tooltip.insertAdjacentHTML("beforeend", `<text x="${boxX + 8}" y="${boxY + 16}">x = ${x[idx].toFixed(3)}</text>`);
+    tooltip.insertAdjacentHTML("beforeend", `<text x="${boxX + 8}" y="${boxY + 30}" fill="var(--series-1)">u0 = ${u0_resampled[idx].toFixed(3)}</text>`);
+    tooltip.insertAdjacentHTML("beforeend", `<text x="${boxX + 8}" y="${boxY + 44}" fill="var(--series-2)">pred = ${prediction[idx].toFixed(3)}</text>`);
+    tooltip.style.display = "block";
+  });
+  catcher.addEventListener("mouseleave", hide);
+}
+
+async function loadPresets() {
+  const res = await fetch("/api/presets");
+  const data = await res.json();
+  const btnWrap = document.getElementById("presetButtons");
+  const textarea = document.getElementById("u0Input");
+  const names = Object.keys(data.presets);
+  names.forEach((name, i) => {
+    const btn = document.createElement("button");
+    btn.textContent = name.replace("_", " ");
+    btn.addEventListener("click", () => {
+      textarea.value = data.presets[name].map((v) => v.toFixed(4)).join(", ");
+    });
+    btnWrap.appendChild(btn);
+    if (i === 0) btn.click();
+  });
+}
+
+async function predict() {
+  const statusLine = document.getElementById("statusLine");
+  const raw = document.getElementById("u0Input").value;
+  const u0 = raw.split(",").map((s) => parseFloat(s.trim())).filter((v) => !Number.isNaN(v));
+  if (u0.length < 8) {
+    statusLine.textContent = "Need at least 8 values.";
+    statusLine.className = "status error";
+    return;
+  }
+  statusLine.textContent = "Running inference...";
+  statusLine.className = "status";
+  try {
+    const res = await fetch("/api/predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ u0 }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+    const result = await res.json();
+    render(result);
+    statusLine.textContent = `Done (${u0.length} input points -> resampled to ${result.x.length}).`;
+  } catch (err) {
+    statusLine.textContent = "Error: " + err.message;
+    statusLine.className = "status error";
+  }
+}
+
+document.getElementById("predictBtn").addEventListener("click", predict);
+drawGrid();
+setupHover();
+loadPresets();
+</script>
+</body>
+</html>
