@@ -170,11 +170,38 @@ def _darcy_synthetic_presets(resolution: int) -> dict:
             mode="edge",
         )
 
+    # off-center inclusion, closer to one corner than the circular_inclusion preset
+    cx2, cy2, r2 = res * 0.3, res * 0.3, res / 6
+    offcenter_inclusion = np.where((xx - cx2) ** 2 + (yy - cy2) ** 2 < r2 ** 2, lo, hi)
+
+    # an L-shaped high-permeability region (vertical + horizontal bar) against a
+    # low-permeability background -- the bar must get the distinct (hi) value,
+    # since the complement of an "L touching two edges" is itself just a plain
+    # rectangle, so the other way round the shape isn't visually an L at all.
+    # xx is the row index, yy the column index.
+    arm = res // 3
+    l_mask = (yy < arm) | (xx >= res - arm)
+    l_shape = np.where(l_mask, hi, lo)
+
+    diagonal_bands = np.where(((xx + yy) // (res // 6)) % 2 == 0, hi, lo)
+
+    rng2 = np.random.default_rng(13)
+    sparse_holes = np.full((res, res), hi)
+    n_holes = 10
+    hole_r = res / 14
+    centers = rng2.uniform(hole_r, res - hole_r, size=(n_holes, 2))
+    for hx, hy in centers:
+        sparse_holes = np.where((xx - hx) ** 2 + (yy - hy) ** 2 < hole_r ** 2, lo, sparse_holes)
+
     return {
         "checkerboard": checkerboard.astype(np.float32).tolist(),
         "circular_inclusion": circular_inclusion.astype(np.float32).tolist(),
         "stripes": stripes.astype(np.float32).tolist(),
         "random_blocks": random_blocks.astype(np.float32).tolist(),
+        "offcenter_inclusion": offcenter_inclusion.astype(np.float32).tolist(),
+        "l_shape": l_shape.astype(np.float32).tolist(),
+        "diagonal_bands": diagonal_bands.astype(np.float32).tolist(),
+        "sparse_holes": sparse_holes.astype(np.float32).tolist(),
     }
 
 
