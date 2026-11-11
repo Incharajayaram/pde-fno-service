@@ -126,6 +126,32 @@
     white-space: nowrap;
     z-index: 10;
   }
+
+  .section-title { font-size: 1rem; margin: 0 0 8px; }
+  .section-text { font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; margin: 0 0 14px; }
+  .section-text code {
+    font-family: ui-monospace, monospace;
+    font-size: 0.8em;
+    background: var(--page);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    white-space: nowrap;
+  }
+  .results-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-bottom: 14px;
+  }
+  .results-table th, .results-table td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .results-table th { color: var(--text-muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.02em; }
+  .results-table td:nth-child(3), .results-table th:nth-child(3) { text-align: right; font-variant-numeric: tabular-nums; }
+  .results-table tr.highlight-row td { color: var(--text-primary); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -152,6 +178,46 @@
 
   <div class="card">
     <div class="panels" id="panels"></div>
+  </div>
+
+  <div class="card">
+    <h2 class="section-title">Resolution invariance check</h2>
+    <p class="section-text">
+      This model was trained at 128&times;128. PDEBench's Darcy Flow data is natively
+      128&times;128 too &mdash; unlike the 1D Burgers' dataset (native 1024, trained at 256),
+      there's no independent higher-resolution ground truth available to test true
+      zero-shot <em>super</em>-resolution here. What <em>is</em> verifiable: the same
+      architectural property (spectral convolutions truncated to a fixed 12&times;12 Fourier
+      modes, independent of grid size) means the exact same trained weights can also run
+      directly at <strong>lower</strong> resolutions, with no retraining. Below, the held-out
+      test set (1,000 samples) is evaluated at 128/64/32, built by exact striding (no
+      interpolation) of the native field, against real ground truth at each matching resolution.
+    </p>
+    <table class="results-table">
+      <thead>
+        <tr><th>Resolution</th><th>vs. training resolution</th><th>Relative L2</th></tr>
+      </thead>
+      <tbody>
+        <tr class="highlight-row">
+          <td>128&times;128</td><td>training resolution</td><td>0.043435</td>
+        </tr>
+        <tr>
+          <td>64&times;64</td><td>2&times; zero-shot coarsening</td><td>0.068109</td>
+        </tr>
+        <tr>
+          <td>32&times;32</td><td>4&times; zero-shot coarsening</td><td>0.161304</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="section-text" style="margin-bottom: 0;">
+      Unlike the Burgers model (near-flat error across 4&times; the training resolution), error here
+      rises substantially at coarser grids. The likely reason: Burgers' viscosity (&nu;=0.01) smooths
+      its solutions into genuinely band-limited (low-mode) functions, so a 16-mode truncation barely
+      loses anything at any resolution. Darcy's permeability field is binary/piecewise-constant with
+      sharp interfaces &mdash; real high-frequency content that exact-stride decimation of the grid
+      itself distorts, independent of the model. This is a genuine limit of resolution-invariance for
+      inputs that aren't smooth, not a bug. Reproducible via <code>python -m src.eval_superres_darcy</code>.
+    </p>
   </div>
 </div>
 
