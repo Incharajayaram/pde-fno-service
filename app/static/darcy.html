@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Darcy Flow Operator</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --border:         rgba(11,11,11,0.10);
+    --accent:         #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page:           #0d0d0d;
+      --surface-1:      #1a1a19;
+      --text-primary:   #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --border:         rgba(255,255,255,0.10);
+      --accent:         #3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --border:         rgba(255,255,255,0.10);
+    --accent:         #3987e5;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.25rem; margin: 0 0 4px; }
+  .subtitle { color: var(--text-secondary); font-size: 0.9rem; margin: 0 0 8px; }
+  .nav-link { font-size: 0.85rem; }
+  .nav-link a { color: var(--accent); }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    margin-top: 16px;
+  }
+
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .preset-group-label { font-size: 0.75rem; color: var(--text-muted); margin: 10px 0 6px; }
+  .preset-group-label:first-child { margin-top: 0; }
+  button {
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--text-secondary); }
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+    font-weight: 600;
+  }
+  button.primary:hover { opacity: 0.9; }
+
+  .status { font-size: 0.8rem; color: var(--text-muted); min-height: 1.2em; margin-top: 8px; }
+  .error { color: #eb6834; }
+
+  .panels { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+  .panel { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .panel-label { font-size: 0.8rem; color: var(--text-secondary); font-weight: 600; }
+  .canvas-wrap { position: relative; }
+  canvas.heatmap {
+    width: 260px;
+    height: 260px;
+    image-rendering: pixelated;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    cursor: crosshair;
+  }
+  .colorbar {
+    width: 260px;
+    height: 12px;
+    border-radius: 4px;
+    margin-top: 2px;
+  }
+  .colorbar-labels {
+    display: flex;
+    justify-content: space-between;
+    width: 260px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }
+  .cell-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 0.72rem;
+    color: var(--text-primary);
+    display: none;
+    white-space: nowrap;
+    z-index: 10;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Darcy Flow Operator</h1>
+  <p class="subtitle">
+    FNO2d trained on PDEBench's 2D Darcy Flow (&beta;=1.0). Give it a permeability field &nu;(x,y); it predicts the steady-state pressure field directly &mdash; a single forward pass, no PDE solver.
+  </p>
+  <p class="nav-link"><a href="/">&larr; Back to the 1D Burgers' equation demo</a></p>
+
+  <div class="card">
+    <label style="font-size:0.8rem; color: var(--text-secondary); display:block; margin-bottom:6px;">
+      Pick a permeability field preset
+    </label>
+    <div class="preset-group-label">Synthetic patterns</div>
+    <div class="presets" id="syntheticButtons"></div>
+    <div class="preset-group-label">Real PDEBench test samples (never seen during training &mdash; ground truth included)</div>
+    <div class="presets" id="realSampleButtons"></div>
+    <div style="margin-top: 12px; display:flex; gap: 8px; align-items: center;">
+      <button class="primary" id="predictBtn">Predict pressure field</button>
+      <span class="status" id="statusLine"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="panels" id="panels"></div>
+  </div>
+</div>
+
+<script>
+// Sequential blue ramp (5 control points from the reference palette),
+// linearly interpolated in RGB space. One hue, light->dark = magnitude.
+const BLUE_RAMP = [
+  [0.00, [205, 226, 251]],
+  [0.25, [134, 182, 239]],
+  [0.50, [57, 135, 229]],
+  [0.75, [28, 92, 171]],
+  [1.00, [13, 54, 107]],
+];
+
+function colorAt(t) {
+  t = Math.min(1, Math.max(0, t));
+  for (let i = 0; i < BLUE_RAMP.length - 1; i++) {
+    const [t0, c0] = BLUE_RAMP[i], [t1, c1] = BLUE_RAMP[i + 1];
+    if (t >= t0 && t <= t1) {
+      const f = (t - t0) / (t1 - t0 || 1);
+      return c0.map((v, idx) => Math.round(v + (c1[idx] - v) * f));
+    }
+  }
+  return BLUE_RAMP[BLUE_RAMP.length - 1][1];
+}
+
+function drawHeatmap(canvas, field, vmin, vmax) {
+  const res = field.length;
+  canvas.width = res;
+  canvas.height = res;
+  const ctx = canvas.getContext("2d");
+  const imgData = ctx.createImageData(res, res);
+  for (let i = 0; i < res; i++) {
+    for (let j = 0; j < res; j++) {
+      const v = field[i][j];
+      const t = (v - vmin) / ((vmax - vmin) || 1);
+      const [r, g, b] = colorAt(t);
+      const idx = (i * res + j) * 4;
+      imgData.data[idx] = r;
+      imgData.data[idx + 1] = g;
+      imgData.data[idx + 2] = b;
+      imgData.data[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+function drawColorbar(canvas, vmin, vmax) {
+  const w = 260, h = 12;
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  for (let x = 0; x < w; x++) {
+    const [r, g, b] = colorAt(x / (w - 1));
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(x, 0, 1, h);
+  }
+}
+
+function makePanel(label, field, vmin, vmax) {
+  const panel = document.createElement("div");
+  panel.className = "panel";
+
+  const labelEl = document.createElement("div");
+  labelEl.className = "panel-label";
+  labelEl.textContent = label;
+  panel.appendChild(labelEl);
+
+  const canvasWrap = document.createElement("div");
+  canvasWrap.className = "canvas-wrap";
+  const canvas = document.createElement("canvas");
+  canvas.className = "heatmap";
+  const tooltip = document.createElement("div");
+  tooltip.className = "cell-tooltip";
+  canvasWrap.appendChild(canvas);
+  canvasWrap.appendChild(tooltip);
+  panel.appendChild(canvasWrap);
+
+  const colorbar = document.createElement("canvas");
+  colorbar.className = "colorbar";
+  panel.appendChild(colorbar);
+
+  const labelsRow = document.createElement("div");
+  labelsRow.className = "colorbar-labels";
+  labelsRow.innerHTML = `<span>${vmin.toFixed(3)}</span><span>${vmax.toFixed(3)}</span>`;
+  panel.appendChild(labelsRow);
+
+  drawHeatmap(canvas, field, vmin, vmax);
+  drawColorbar(colorbar, vmin, vmax);
+
+  const res = field.length;
+  canvas.addEventListener("mousemove", (evt) => {
+    const rect = canvas.getBoundingClientRect();
+    const px = Math.floor(((evt.clientX - rect.left) / rect.width) * res);
+    const py = Math.floor(((evt.clientY - rect.top) / rect.height) * res);
+    if (px < 0 || px >= res || py < 0 || py >= res) return;
+    const v = field[py][px];
+    tooltip.style.display = "block";
+    tooltip.style.left = `${evt.clientX - rect.left + 10}px`;
+    tooltip.style.top = `${evt.clientY - rect.top + 10}px`;
+    tooltip.textContent = `(${px}, ${py}) = ${v.toFixed(4)}`;
+  });
+  canvas.addEventListener("mouseleave", () => { tooltip.style.display = "none"; });
+
+  return panel;
+}
+
+function flatBounds(fields) {
+  let vmin = Infinity, vmax = -Infinity;
+  for (const field of fields) {
+    for (const row of field) {
+      for (const v of row) {
+        if (v < vmin) vmin = v;
+        if (v > vmax) vmax = v;
+      }
+    }
+  }
+  return [vmin, vmax];
+}
+
+let currentTruePressure = null;
+
+function renderPanels(nu, prediction, truePressure) {
+  const panels = document.getElementById("panels");
+  panels.innerHTML = "";
+
+  const [nuMin, nuMax] = flatBounds([nu]);
+  panels.appendChild(makePanel("Permeability ν(x, y)", nu, nuMin, nuMax));
+
+  const pressureFields = truePressure ? [prediction, truePressure] : [prediction];
+  const [pMin, pMax] = flatBounds(pressureFields);
+  panels.appendChild(makePanel("Predicted pressure", prediction, pMin, pMax));
+  if (truePressure) {
+    panels.appendChild(makePanel("Ground truth pressure", truePressure, pMin, pMax));
+  }
+}
+
+async function loadPresets() {
+  const res = await fetch("/api/darcy/presets");
+  if (!res.ok) {
+    document.getElementById("statusLine").textContent = "Darcy model is still training / not deployed yet.";
+    document.getElementById("statusLine").className = "status error";
+    return null;
+  }
+  return res.json();
+}
+
+function serializeField(field) {
+  return JSON.stringify(field);
+}
+
+async function init() {
+  const data = await loadPresets();
+  if (!data) return;
+
+  let currentNu = null;
+
+  const syntheticWrap = document.getElementById("syntheticButtons");
+  const names = Object.keys(data.synthetic);
+  names.forEach((name, i) => {
+    const btn = document.createElement("button");
+    btn.textContent = name.replace(/_/g, " ");
+    btn.addEventListener("click", () => {
+      currentNu = data.synthetic[name];
+      currentTruePressure = null;
+      renderPanels(currentNu, currentNu, null); // show input only until predicted
+    });
+    syntheticWrap.appendChild(btn);
+    if (i === 0) btn.click();
+  });
+
+  const realWrap = document.getElementById("realSampleButtons");
+  data.real_samples.forEach((sample) => {
+    const btn = document.createElement("button");
+    btn.textContent = sample.label;
+    btn.addEventListener("click", () => {
+      currentNu = sample.nu;
+      currentTruePressure = sample.true_pressure;
+      renderPanels(currentNu, currentNu, null);
+    });
+    realWrap.appendChild(btn);
+  });
+
+  document.getElementById("predictBtn").addEventListener("click", async () => {
+    const statusLine = document.getElementById("statusLine");
+    if (!currentNu) return;
+    statusLine.textContent = "Running inference...";
+    statusLine.className = "status";
+    try {
+      const res = await fetch("/api/darcy/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nu: currentNu }),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+      const result = await res.json();
+      renderPanels(result.nu_resampled, result.pressure, currentTruePressure);
+      statusLine.textContent = `Done (resolution ${result.resolution}x${result.resolution}).`;
+    } catch (err) {
+      statusLine.textContent = "Error: " + err.message;
+      statusLine.className = "status error";
+    }
+  });
+}
+
+init();
+</script>
+</body>
+</html>
